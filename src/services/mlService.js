@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const tf = require('@tensorflow/tfjs-node'); // Import TensorFlow.js
+const tf = require('@tensorflow/tfjs'); // Import TensorFlow.js
 const fs = require('fs');
 let model;
 

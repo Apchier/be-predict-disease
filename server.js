@@ -1,5 +1,7 @@
 const app = require('./src/app');
 const { PrismaClient } = require('@prisma/client');
+const fetch = require('node-fetch'); 
+global.fetch = fetch; 
 
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;

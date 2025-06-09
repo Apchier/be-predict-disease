@@ -2,7 +2,6 @@ const prisma = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 const { predictDisease } = require('../services/mlService');
 const fs = require('fs').promises;
-const path = require('path');
 
 const scanImage = async (req, res, next) => {
     try {
@@ -10,8 +9,44 @@ const scanImage = async (req, res, next) => {
             return sendError(res, 'Image file is required', 400);
         }
 
-        // Simulate ML prediction (replace with actual ML service)
+        // Make prediction using the ML service
         const prediction = await predictDisease(req.file.path);
+
+        // Debug: Log prediction result
+        console.log('Prediction result:', prediction);
+
+        // Validasi apakah disease ID ada di database
+        const diseaseExists = await prisma.disease.findUnique({
+            where: { id: prediction.diseaseId },
+            select: {
+                id: true,
+                name: true,
+                title: true,
+                description: true,
+                symptoms: true,
+                treatment: true
+            }
+        });
+
+        if (!diseaseExists) {
+            // Clean up uploaded file
+            try {
+                await fs.unlink(req.file.path);
+            } catch (unlinkError) {
+                console.error('Error deleting file:', unlinkError);
+            }
+            
+            // Log untuk debugging
+            console.error(`Disease with ID ${prediction.diseaseId} not found in database`);
+            
+            // Cek diseases yang ada di database
+            const availableDiseases = await prisma.disease.findMany({
+                select: { id: true, name: true }
+            });
+            console.log('Available diseases in database:', availableDiseases);
+            
+            return sendError(res, `Disease with ID ${prediction.diseaseId} not found in database`, 400);
+        }
 
         const result = {
             diseaseId: prediction.diseaseId,
@@ -23,47 +58,55 @@ const scanImage = async (req, res, next) => {
 
         // If user is authenticated, save to history
         if (req.user) {
-            const scanHistory = await prisma.scanHistory.create({
-                data: {
-                    userId: req.user.id,
-                    diseaseId: prediction.diseaseId,
-                    imagePath: req.file.path,
-                    result: JSON.stringify(result),
-                    confidence: prediction.confidence
-                },
-                include: {
-                    disease: {
-                        select: {
-                            name: true,
-                            title: true,
-                            description: true,
-                            symptoms: true,
-                            treatment: true
+            try {
+                const scanHistory = await prisma.scanHistory.create({
+                    data: {
+                        userId: req.user.id,
+                        diseaseId: prediction.diseaseId,
+                        imagePath: req.file.path,
+                        result: JSON.stringify(result),
+                        confidence: prediction.confidence
+                    },
+                    include: {
+                        disease: {
+                            select: {
+                                name: true,
+                                title: true,
+                                description: true,
+                                symptoms: true,
+                                treatment: true
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            result.scanId = scanHistory.id;
-            result.disease = scanHistory.disease;
+                result.scanId = scanHistory.id;
+                result.disease = scanHistory.disease;
+            } catch (dbError) {
+                // Clean up uploaded file jika gagal save ke database
+                try {
+                    await fs.unlink(req.file.path);
+                } catch (unlinkError) {
+                    console.error('Error deleting file:', unlinkError);
+                }
+                
+                console.error('Database error when creating scan history:', dbError);
+                throw dbError;
+            }
         } else {
             // Get disease info for anonymous users
-            const disease = await prisma.disease.findUnique({
-                where: { id: prediction.diseaseId },
-                select: {
-                    name: true,
-                    title: true,
-                    description: true,
-                    symptoms: true,
-                    treatment: true
-                }
-            });
-            result.disease = disease;
+            result.disease = {
+                name: diseaseExists.name,
+                title: diseaseExists.title,
+                description: diseaseExists.description,
+                symptoms: diseaseExists.symptoms,
+                treatment: diseaseExists.treatment
+            };
         }
 
         sendSuccess(res, result, 'Image scanned successfully');
     } catch (error) {
-        // Clean up uploaded file on error
+        // Clean up the uploaded file in case of an error
         if (req.file) {
             try {
                 await fs.unlink(req.file.path);
@@ -71,6 +114,7 @@ const scanImage = async (req, res, next) => {
                 console.error('Error deleting file:', unlinkError);
             }
         }
+        console.error('Error in scanImage:', error);
         next(error);
     }
 };
@@ -112,6 +156,7 @@ const getScanHistory = async (req, res, next) => {
 
         sendSuccess(res, { scanHistory, pagination }, 'Scan history retrieved successfully');
     } catch (error) {
+        console.error('Error in getScanHistory:', error);
         next(error);
     }
 };
@@ -144,6 +189,7 @@ const getScanById = async (req, res, next) => {
 
         sendSuccess(res, scan, 'Scan retrieved successfully');
     } catch (error) {
+        console.error('Error in getScanById:', error);
         next(error);
     }
 };
@@ -163,7 +209,7 @@ const deleteScan = async (req, res, next) => {
             return sendError(res, 'Scan not found', 404);
         }
 
-        // Delete image file
+        // Delete image file if it exists
         if (scan.imagePath) {
             try {
                 await fs.unlink(scan.imagePath);
@@ -179,6 +225,7 @@ const deleteScan = async (req, res, next) => {
 
         sendSuccess(res, null, 'Scan deleted successfully');
     } catch (error) {
+        console.error('Error in deleteScan:', error);
         next(error);
     }
 };

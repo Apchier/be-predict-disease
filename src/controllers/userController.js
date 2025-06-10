@@ -30,7 +30,6 @@ const updateProfile = async (req, res, next) => {
             return sendError(res, 'No data to update', 400);
         }
 
-        // Check for existing username/email
         if (username || email) {
             const existingUser = await prisma.user.findFirst({
                 where: {
@@ -81,21 +80,17 @@ const changePassword = async (req, res, next) => {
 
         const { currentPassword, newPassword } = req.body;
 
-        // Get current user with password
         const user = await prisma.user.findUnique({
             where: { id: req.user.id }
         });
 
-        // Verify current password
         const isValidPassword = await bcrypt.compare(currentPassword, user.password);
         if (!isValidPassword) {
             return sendError(res, 'Current password is incorrect', 400);
         }
 
-        // Hash new password
         const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-        // Update password
         await prisma.user.update({
             where: { id: req.user.id },
             data: {

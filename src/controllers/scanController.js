@@ -9,13 +9,19 @@ const scanImage = async (req, res, next) => {
             return sendError(res, 'Image file is required', 400);
         }
 
-        // Make prediction using the ML service
         const prediction = await predictDisease(req.file.path);
 
-        // Debug: Log prediction result
         console.log('Prediction result:', prediction);
 
-        // Validasi apakah disease ID ada di database
+        if (prediction.diseaseId === null) { 
+            try {
+                await fs.unlink(req.file.path);
+            } catch (unlinkError) {
+                console.error('Error deleting file:', unlinkError);
+            }
+            return sendError(res, 'Prediction not reliable, disease ID is null', 400);
+        }
+
         const diseaseExists = await prisma.disease.findUnique({
             where: { id: prediction.diseaseId },
             select: {
@@ -29,17 +35,14 @@ const scanImage = async (req, res, next) => {
         });
 
         if (!diseaseExists) {
-            // Clean up uploaded file
             try {
                 await fs.unlink(req.file.path);
             } catch (unlinkError) {
                 console.error('Error deleting file:', unlinkError);
             }
             
-            // Log untuk debugging
             console.error(`Disease with ID ${prediction.diseaseId} not found in database`);
             
-            // Cek diseases yang ada di database
             const availableDiseases = await prisma.disease.findMany({
                 select: { id: true, name: true }
             });
@@ -53,10 +56,9 @@ const scanImage = async (req, res, next) => {
             diseaseName: prediction.diseaseName,
             confidence: prediction.confidence,
             imagePath: req.file.path,
-            timestamp: new Date()
+            timestamp: new Date()  
         };
 
-        // If user is authenticated, save to history
         if (req.user) {
             try {
                 const scanHistory = await prisma.scanHistory.create({
@@ -81,9 +83,8 @@ const scanImage = async (req, res, next) => {
                 });
 
                 result.scanId = scanHistory.id;
-                result.disease = scanHistory.disease;
+                result.disease = scanHistory.disease;  
             } catch (dbError) {
-                // Clean up uploaded file jika gagal save ke database
                 try {
                     await fs.unlink(req.file.path);
                 } catch (unlinkError) {
@@ -91,10 +92,9 @@ const scanImage = async (req, res, next) => {
                 }
                 
                 console.error('Database error when creating scan history:', dbError);
-                throw dbError;
+                return sendError(res, 'Failed to save scan history', 500);
             }
         } else {
-            // Get disease info for anonymous users
             result.disease = {
                 name: diseaseExists.name,
                 title: diseaseExists.title,
@@ -106,7 +106,6 @@ const scanImage = async (req, res, next) => {
 
         sendSuccess(res, result, 'Image scanned successfully');
     } catch (error) {
-        // Clean up the uploaded file in case of an error
         if (req.file) {
             try {
                 await fs.unlink(req.file.path);
@@ -209,7 +208,6 @@ const deleteScan = async (req, res, next) => {
             return sendError(res, 'Scan not found', 404);
         }
 
-        // Delete image file if it exists
         if (scan.imagePath) {
             try {
                 await fs.unlink(scan.imagePath);
@@ -218,7 +216,6 @@ const deleteScan = async (req, res, next) => {
             }
         }
 
-        // Delete scan record
         await prisma.scanHistory.delete({
             where: { id: parseInt(id) }
         });

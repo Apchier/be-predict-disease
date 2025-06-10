@@ -12,12 +12,10 @@ const loadModel = async () => {
             console.log("Model loaded successfully");
             console.log("Model input shape:", model.inputs[0].shape);
 
-            // Cek apakah model memiliki metadata
             if (model.modelTopology && model.modelTopology.metadata) {
                 console.log("Model metadata:", model.modelTopology.metadata);
             }
 
-            // Cek signature jika ada
             if (model.signature) {
                 console.log("Model signature:", model.signature);
             }
@@ -30,25 +28,19 @@ const loadModel = async () => {
     return model;
 };
 
-
 const processImage = async (imagePath) => {
     try {
-        // Load image menggunakan canvas
         const image = await loadImage(imagePath);
         console.log(`Original image size: ${image.width}x${image.height}`);
 
-        // Buat canvas dengan ukuran 256x256 
         const canvas = createCanvas(256, 256); 
         const ctx = canvas.getContext('2d');
 
-        // Draw dan resize image ke 256x256
         ctx.drawImage(image, 0, 0, 256, 256); 
 
-        // Get image data
         const imageData = ctx.getImageData(0, 0, 256, 256); 
         const data = imageData.data;
 
-        // Convert RGBA ke RGB menggunakan Uint8Array
         const rgbData = new Uint8Array(256 * 256 * 3); 
         let rgbIndex = 0;
 
@@ -58,19 +50,15 @@ const processImage = async (imagePath) => {
             rgbData[rgbIndex++] = data[i + 2]; 
         }
 
-        // Create tensor dari Uint8Array dengan shape [256, 256, 3]
         const imgTensor = tf.tensor3d(rgbData, [256, 256, 3]); 
 
-        // Convert ke float dan normalize
         const floatTensor = imgTensor.toFloat();
         const normalizedTensor = floatTensor.div(tf.scalar(255));
 
-        // Add batch dimension 
         const inputTensor = normalizedTensor.expandDims(0);
 
         console.log("Input tensor shape:", inputTensor.shape);
 
-        // Cleanup
         imgTensor.dispose();
         floatTensor.dispose();
         normalizedTensor.dispose();
@@ -116,7 +104,6 @@ const predictDisease = async (imagePath) => {
         const inputTensor = await processImage(imagePath);
 
         console.log("Making prediction...");
-
         console.log("Final input shape before prediction:", inputTensor.shape);
 
         const predictions = model.predict(inputTensor);
@@ -125,6 +112,10 @@ const predictDisease = async (imagePath) => {
         const predictedClass = predData.indexOf(Math.max(...predData));
         const confidence = predData[predictedClass];
 
+        if (confidence < 0.75) {
+            return { diseaseId: null, diseaseName: 'Unclear', confidence };
+        }
+
         const diseaseMapping = {
             0: { diseaseId: 1, diseaseName: 'Bercak', confidence }, 
             1: { diseaseId: 2, diseaseName: 'Hawar', confidence },   
@@ -132,7 +123,6 @@ const predictDisease = async (imagePath) => {
             3: { diseaseId: 4, diseaseName: 'Sehat', confidence }    
         };
 
-        // Cleanup tensors
         inputTensor.dispose();
         predictions.dispose();
 

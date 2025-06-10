@@ -19,7 +19,6 @@ const register = async (req, res, next) => {
 
         const { username, email, password } = req.body;
 
-        // Check if user already exists
         const existingUser = await prisma.user.findFirst({
             where: {
                 OR: [{ email }, { username }]
@@ -30,10 +29,8 @@ const register = async (req, res, next) => {
             return sendError(res, 'User already exists', 400);
         }
 
-        // Hash password
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        // Create user
         const user = await prisma.user.create({
             data: {
                 username,
@@ -66,7 +63,6 @@ const login = async (req, res, next) => {
 
         const { email, password } = req.body;
 
-        // Find user
         const user = await prisma.user.findUnique({
             where: { email }
         });
@@ -75,7 +71,6 @@ const login = async (req, res, next) => {
             return sendError(res, 'Invalid credentials', 401);
         }
 
-        // Check password
         const isValidPassword = await bcrypt.compare(password, user.password);
         if (!isValidPassword) {
             return sendError(res, 'Invalid credentials', 401);

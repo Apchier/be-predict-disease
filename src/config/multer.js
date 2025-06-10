@@ -2,7 +2,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directories exist
 const uploadDirs = ['uploads/scans', 'uploads/references'];
 uploadDirs.forEach(dir => {
     if (!fs.existsSync(dir)) {

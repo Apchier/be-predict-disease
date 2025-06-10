@@ -156,18 +156,15 @@ const deleteUser = async (req, res, next) => {
             return sendError(res, 'Cannot delete your own account', 400);
         }
 
-        // Get user's scan history to delete associated images
         const scanHistory = await prisma.scanHistory.findMany({
             where: { userId: id },
             select: { imagePath: true }
         });
 
-        // Delete user (cascade will handle scan history)
         await prisma.user.delete({
             where: { id }
         });
 
-        // Delete associated image files
         for (const scan of scanHistory) {
             if (scan.imagePath) {
                 try {
@@ -236,7 +233,6 @@ const deleteScanHistory = async (req, res, next) => {
             return sendError(res, 'Scan not found', 404);
         }
 
-        // Delete image file
         if (scan.imagePath) {
             try {
                 await fs.unlink(scan.imagePath);
@@ -245,7 +241,6 @@ const deleteScanHistory = async (req, res, next) => {
             }
         }
 
-        // Delete scan record
         await prisma.scanHistory.delete({
             where: { id: parseInt(id) }
         });
@@ -268,7 +263,6 @@ const uploadReferenceImage = async (req, res, next) => {
             return sendError(res, 'Disease ID is required', 400);
         }
 
-        // Check if disease exists
         const disease = await prisma.disease.findUnique({
             where: { id: parseInt(diseaseId) }
         });
@@ -293,7 +287,6 @@ const uploadReferenceImage = async (req, res, next) => {
 
         sendSuccess(res, referenceImage, 'Reference image uploaded successfully', 201);
     } catch (error) {
-        // Clean up uploaded file on error
         if (req.file) {
             try {
                 await fs.unlink(req.file.path);
@@ -317,14 +310,12 @@ const deleteReferenceImage = async (req, res, next) => {
             return sendError(res, 'Reference image not found', 404);
         }
 
-        // Delete image file
         try {
             await fs.unlink(referenceImage.imagePath);
         } catch (error) {
             console.error('Error deleting image file:', error);
         }
 
-        // Delete record
         await prisma.cornReferenceImage.delete({
             where: { id: parseInt(id) }
         });
